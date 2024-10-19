@@ -8,3 +8,8 @@ def map_mask_engine(selected_mask_engine, clip_text):
     else:
         mask_engine = None
     return mask_engine
+
+def index_of_no_face_action(dropdown_text):
+    global no_face_choices
+
+    return no_face_choices.index(dropdown_text) 

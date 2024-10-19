@@ -1,14 +1,15 @@
 from pydantic import BaseModel
+from typing import Literal
 
 class SwapArgs(BaseModel):
     enhancer: str
-    detection: str
+    swap_mode: Literal["selected", "first", "all_female", "all_male"]
     keep_frames: int
     wait_after_extraction: int
     skip_audio: bool
     face_distance: float
     blend_ratio: float
-    selected_mask_engine: str
+    selected_mask_engine: Literal["Clip2Seg", "DFL XSeg"]
     clip_text: str
     processing_method: str
     no_face_action: str
