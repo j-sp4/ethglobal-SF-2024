@@ -9,7 +9,6 @@ from roop.core import batch_process_regular
 import os
 import shutil
 import pathlib
-import gradio as gr
 import roop.utilities as util
 import roop.globals
 from roop.face_util import extract_face_images, create_blank_image
@@ -21,15 +20,14 @@ from swap.utils import translate_swap_mode, index_of_no_face_action, map_mask_en
 
 from swap.models import SwapModel, SwapArgs
 
-def get_swap_implementation(data: SwapModel):
-    pass
-
 DIRECTORY = tempfile.gettempdir()
 UPLOAD_DIRECTORY = os.path.join(DIRECTORY, "uploads")
 
 src_video_bucket_name = os.getenv("GOOGLE_SRC_VIDEO_BUCKET_NAME")
 target_image_bucket_name = os.getenv("GOOGLE_TARGET_IMAGE_BUCKET_NAME")
 swap_video_bucket_name = os.getenv("GOOGLE_SWAP_VIDEO_BUCKET_NAME")
+
+list_files_process : list[ProcessEntry] = []
 
 async def get_swap_implementation(data: SwapModel):
     logger.debug(data)
@@ -100,7 +98,7 @@ def swap_faces(swap_args: SwapArgs):
     roop.globals.keep_frames = swap_args.keep_frames
     roop.globals.wait_after_extraction = swap_args.wait_after_extraction
     roop.globals.skip_audio = swap_args.skip_audio
-    roop.globals.face_swap_mode = translate_swap_mode(detection)
+    roop.globals.face_swap_mode = swap_args.swap_mode
     roop.globals.no_face_action = index_of_no_face_action(swap_args.no_face_action)
     roop.globals.vr_mode = swap_args.vr_mode
     roop.globals.autorotate_faces = swap_args.autorotate
@@ -108,17 +106,17 @@ def swap_faces(swap_args: SwapArgs):
 
     if roop.globals.face_swap_mode == 'selected':
         if len(roop.globals.TARGET_FACES) < 1:
-            gr.Error('No Target Face selected!')
-            return gr.Button(variant="primary"), None, None
+            raise ValueError('No Target Face selected!')
 
     is_processing = True            
-    yield gr.Button(variant="secondary", interactive=False), gr.Button(variant="primary", interactive=True), None
     roop.globals.execution_threads = roop.globals.CFG.max_threads
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
 
-    batch_process_regular(list_files_process, mask_engine, clip_text, processing_method == "In-Memory processing", imagemask, num_swap_steps, progress, SELECTED_INPUT_FACE_INDEX)
+    processing_method = swap_args.processing_method
+
+    batch_process_regular(list_files_process, mask_engine, swap_args.clip_text, processing_method == "In-Memory processing", swap_args.imagemask, swap_args.num_swap_steps, progress, SELECTED_INPUT_FACE_INDEX)
     is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [str(item) for item in outdir.rglob("*") if item.is_file()]
