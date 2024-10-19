@@ -6,26 +6,26 @@ services:
     ports:
       - 3030:3030
     volumes:
-      - .ml-backend/:/usr/src/app
+      - ./ml-backend/:/usr/src/app
     env_file:
       - .env
     depends_on:
       redis:
         condition: service_started
 
-  app:
-    build:
-      context: .
-      dockerfile: .docker/app/dev.Dockerfile
-    ports:
-      - 3000:3000
-    volumes:
-      - .app/:/usr/src/app
-    env_file:
-      - .env
-    depends_on:
-      ml-backend:
-        condition: service_started
+  # app:
+  #   build:
+  #     context: .
+  #     dockerfile: .docker/app/dev.Dockerfile
+  #   ports:
+  #     - 3000:3000
+  #   volumes:
+  #     - .app/:/usr/src/app
+  #   env_file:
+  #     - .env
+  #   depends_on:
+  #     ml-backend:
+  #       condition: service_started
 
   mongo:
     image: mongo:latest
