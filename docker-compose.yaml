@@ -24,7 +24,7 @@ services:
     env_file:
       - .env
     depends_on:
-      app:
+      ml-backend:
         condition: service_started
 
   mongo:
