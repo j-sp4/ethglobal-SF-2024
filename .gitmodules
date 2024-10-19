@@ -1,0 +1,3 @@
+[submodule "roop"]
+	path = /ml-backend/roop
+	url = https://github.com/s0md3v/roop
