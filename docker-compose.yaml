@@ -1,0 +1,53 @@
+services:
+  ml-backend:
+    build:
+      context: .
+      dockerfile: .docker/ml-backend/dev.Dockerfile
+    ports:
+      - 3030:3030
+    volumes:
+      - .ml-backend/:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_started
+
+  app:
+    build:
+      context: .
+      dockerfile: .docker/app/dev.Dockerfile
+    ports:
+      - 3000:3000
+    volumes:
+      - .app/:/usr/src/app
+    env_file:
+      - .env
+    depends_on:
+      app:
+        condition: service_started
+
+  mongo:
+    image: mongo:latest
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - .docker/mongo:/docker-entrypoint-initdb.d
+      - mongodb-data:/data/db
+      - mongodb-config:/data/configdb
+
+  redis:
+    image: redis/redis-stack-server:latest
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+volumes:
+  mongodb-data:
+  mongodb-config:
+  clickhouse-data:
+  clickhouse-logs:
+  redis-data:
