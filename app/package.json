@@ -9,15 +9,16 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "react": "^18",
-    "react-dom": "^18",
-    "next": "14.2.15",
+    "@dynamic-labs/ethereum": "^3.0.0-alpha",
+    "@dynamic-labs/ethereum-aa": "^3.4.2",
     "@dynamic-labs/sdk-react-core": "^3.0.0-alpha",
-    "viem": "*",
     "@dynamic-labs/wagmi-connector": "^3.0.0-alpha",
     "@tanstack/react-query": "^5.27.5",
-    "wagmi": "^2.5.7",
-    "@dynamic-labs/ethereum": "^3.0.0-alpha"
+    "next": "14.2.15",
+    "react": "^18",
+    "react-dom": "^18",
+    "viem": "*",
+    "wagmi": "^2.5.7"
   },
   "devDependencies": {
     "typescript": "^5",
