@@ -2,6 +2,7 @@ import os
 import cv2 
 import numpy as np
 import psutil
+import asyncio
 
 from enum import Enum
 from roop.ProcessOptions import ProcessOptions
@@ -219,14 +220,15 @@ class ProcessMgr():
                     for p in self.processors:
                         frame = p.Run(frame)
                     resimg = frame
-                else:                            
-                    resimg = self.process_frame(frame)
+                else:
+                    # Use asyncio to run the coroutine
+                    resimg = asyncio.run(self.process_frame(frame))
                 self.processed_queue[threadindex].put((True, resimg))
                 del frame
                 progress()
 
 
-    def write_frames_thread(self):
+    async def write_frames_thread(self):
         nextindex = 0
         num_producers = self.num_threads
         
@@ -234,7 +236,7 @@ class ProcessMgr():
             process, frame = self.processed_queue[nextindex % self.num_threads].get()
             nextindex += 1
             if frame is not None:
-                self.videowriter.write_frame(frame)
+                await self.videowriter.write_frame(frame)  # Use await here
                 del frame
             elif process == False:
                 num_producers -= 1
@@ -275,7 +277,7 @@ class ProcessMgr():
         readthread = Thread(target=self.read_frames_thread, args=(cap, frame_start, frame_end, threads))
         readthread.start()
 
-        writethread = Thread(target=self.write_frames_thread)
+        writethread = Thread(target=lambda: asyncio.run(self.write_frames_thread()))
         writethread.start()
 
         progress_bar_format = '{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}, {rate_fmt}{postfix}]'
@@ -315,11 +317,11 @@ class ProcessMgr():
 # https://github.com/linghu8812/tensorrt_inference
 
 
-    def process_frame(self, frame:Frame):
+    async def process_frame(self, frame:Frame):
         if len(self.input_face_datas) < 1 and not self.options.show_face_masking:
             return frame
         temp_frame = frame.copy()
-        num_swapped, temp_frame = self.swap_faces(frame, temp_frame)
+        num_swapped, temp_frame = await self.swap_faces(frame, temp_frame)
         if num_swapped > 0:
             if roop.globals.no_face_action == eNoFaceAction.SKIP_FRAME_IF_DISSIMILAR:
                 if len(self.input_face_datas) > num_swapped:
@@ -355,11 +357,11 @@ class ProcessMgr():
         
 
 
-    def swap_faces(self, frame, temp_frame):
+    async def swap_faces(self, frame, temp_frame):
         num_faces_found = 0
 
         if self.options.swap_mode == "first":
-            face = get_first_face(frame)
+            face = await get_first_face(frame)  # Use await here if get_first_face is async
 
             if face is None:
                 return num_faces_found, frame
@@ -367,7 +369,7 @@ class ProcessMgr():
             num_faces_found += 1
             temp_frame = self.process_face(self.options.selected_index, face, temp_frame)
         else:
-            faces = get_all_faces(frame)
+            faces = await get_all_faces(frame)  # Use await here if get_all_faces is async
             if faces is None:
                 return num_faces_found, frame
             
@@ -376,7 +378,6 @@ class ProcessMgr():
                     num_faces_found += 1
                     temp_frame = self.process_face(self.options.selected_index, face, temp_frame)
                     del face
-            
             elif self.options.swap_mode == "selected":
                 num_targetfaces = len(self.target_face_datas) 
                 use_index = num_targetfaces == 1
@@ -694,8 +695,4 @@ class ProcessMgr():
 
     async def extract_face_images(self, source_filename, video_info):
         return await face_util_extract_face_images(source_filename, video_info)
-
-
-
-
 

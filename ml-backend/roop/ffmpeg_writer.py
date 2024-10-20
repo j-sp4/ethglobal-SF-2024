@@ -146,7 +146,7 @@ class FFMPEG_VideoWriter:
         self.proc = sp.Popen(cmd, **popen_params)
 
 
-    def write_frame(self, img_array):
+    async def write_frame(self, img_array):
         """ Writes one frame in the file."""
         try:
             #if PY3:
