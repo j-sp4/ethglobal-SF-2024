@@ -12,6 +12,7 @@ psutil
 torch
 torchvision
 onnxruntime
+# onnxruntime-gpu
 tqdm
 ftfy
 regex
