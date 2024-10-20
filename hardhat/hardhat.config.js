@@ -2,7 +2,7 @@ import "@nomicfoundation/hardhat-toolbox"
 
 /** @type import('hardhat/config').HardhatUserConfig */
 
-import "@nomiclabs/hardhat-waffle"
+require( "@nomiclabs/hardhat-waffle")
 
 module.exports = {
   solidity: "0.8.27",
