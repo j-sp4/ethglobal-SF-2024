@@ -3,15 +3,12 @@ pragma solidity ^0.8.27;
 
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 
 contract FaceNFT is ERC721, Ownable, ERC721Burnable {
     uint256 public tokenCounter;
     uint256 public purchasePrice;
     uint256 public usageBaseFee; // Base fee to use a FaceNFT, per second of video
-
-    IERC20 public usdcToken;
 
     // FaceData to Wallet Address (owner of the face)
     mapping(uint256 => address) private faceHashes;
@@ -38,13 +35,10 @@ contract FaceNFT is ERC721, Ownable, ERC721Burnable {
         uint256 faceHash
     );
 
-    constructor(
-        address _usdcTokenAddress
-    ) ERC721("FaceNFT", "FNT") Ownable(msg.sender) {
+    constructor() ERC721("FaceNFT", "FNT") Ownable(msg.sender) {
         tokenCounter = 1;
-        purchasePrice = 5 * 10 ** 6; // 5 USDC
-        usageBaseFee = 1 * 10 ** 6; // 1 USDC per second of video
-        usdcToken = IERC20(_usdcTokenAddress);
+        purchasePrice = 5 * 10 ** 18; // 5 FLOW
+        usageBaseFee = 1 * 10 ** 18; // 1 FLOW per second of video
     }
 
     function registerFace(uint256 _faceHash) external {
@@ -88,22 +82,15 @@ contract FaceNFT is ERC721, Ownable, ERC721Burnable {
         uint256 _tokenId,
         uint256 _videoHash,
         uint256 _videoLength
-    ) external {
+    ) external payable {
         require(ownerOf(_tokenId) == msg.sender, "Not the owner");
 
         uint256 usageFee = calculateUsageFee(_videoLength);
-        require(
-            usdcToken.balanceOf(msg.sender) >= usageFee,
-            "Insufficient USDC balance for usage"
-        );
-        require(
-            usdcToken.allowance(msg.sender, address(this)) >= usageFee,
-            "Allowance not set for USDC usage transfer"
-        );
+        require(msg.value >= usageFee, "Insufficient FLOW sent for usage");
 
         uint256 faceHash = tokenIdsToFaceHashes[_tokenId];
 
-        usdcToken.transferFrom(msg.sender, owner(), usageFee);
+        payable(owner()).transfer(usageFee);
 
         emit FaceUsed(_tokenId, faceHash, _videoHash, _videoLength);
 
@@ -111,19 +98,15 @@ contract FaceNFT is ERC721, Ownable, ERC721Burnable {
         delete tokenIdsToFaceHashes[_tokenId];
     }
 
-    function purchaseFaceNFT(uint256 _faceHash) external {
+    function purchaseFaceNFT(uint256 _faceHash) external payable {
         require(faceHashes[_faceHash] != address(0), "No face registered");
         require(
-            usdcToken.balanceOf(msg.sender) >= purchasePrice,
-            "Insufficient USDC balance for purchase"
-        );
-        require(
-            usdcToken.allowance(msg.sender, address(this)) >= purchasePrice,
-            "Allowance not set for USDC purchase transfer"
+            msg.value >= purchasePrice,
+            "Insufficient FLOW sent for purchase"
         );
         require(faceHashes[_faceHash] != msg.sender, "Already owned");
 
-        usdcToken.transferFrom(msg.sender, owner(), purchasePrice);
+        payable(owner()).transfer(purchasePrice);
 
         tokenCounter += 1;
         _safeMint(msg.sender, tokenCounter);
