@@ -1,9 +1,9 @@
 "use client";
 
+import { AppSidebar } from "@/components/app-sidebar";
+import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { DynamicWidget } from "@/lib/dynamic";
 import { useState, useEffect } from "react";
-import DynamicMethods from "@/app/components/Methods";
-import "./page.css";
 
 const checkIsDarkSchemePreferred = () => {
   if (typeof window !== "undefined") {
@@ -28,8 +28,14 @@ export default function Main() {
   return (
     <div className={`container ${isDarkMode ? "dark" : "light"}`}>
       <div className="modal">
-        <DynamicWidget />
-        <DynamicMethods isDarkMode={isDarkMode} />
+        <SidebarProvider>
+          <DynamicWidget />
+          <AppSidebar />
+          <main>
+            <SidebarTrigger />
+            <div> working </div>
+          </main>
+        </SidebarProvider>
       </div>
     </div>
   );
