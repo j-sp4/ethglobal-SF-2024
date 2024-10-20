@@ -28,14 +28,11 @@ export default function Main() {
   return (
     <div className={`container ${isDarkMode ? "dark" : "light"}`}>
       <div className="modal">
-        <SidebarProvider>
-          <DynamicWidget />
-          <AppSidebar />
-          <main>
-            <SidebarTrigger />
-            <div> working </div>
-          </main>
-        </SidebarProvider>
+        <DynamicWidget />
+        <main>
+          <SidebarTrigger />
+          <div> working </div>
+        </main>
       </div>
     </div>
   );
