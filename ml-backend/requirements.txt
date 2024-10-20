@@ -1,3 +1,18 @@
 uvicorn
 fastapi
 pydantic
+asyncio
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+numpy
+opencv-python
+onnx
+insightface
+psutil
+torch
+torchvision
+onnxruntime
+tqdm
+ftfy
+regex
+loguru

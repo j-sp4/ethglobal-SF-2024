@@ -8,7 +8,6 @@ import subprocess
 import sys
 import urllib
 import torch
-import gradio
 import tempfile
 import cv2
 import zipfile
@@ -41,8 +40,7 @@ def detect_fps(target_path: str) -> float:
     return fps
 
 
-# Gradio wants Images in RGB
-def convert_to_gradio(image):
+def convert_to_rgb(image):
     if image is None:
         return None
     return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
@@ -329,8 +327,6 @@ def create_version_html() -> str:
 python: <span title="{sys.version}">{python_version}</span>
 •
 torch: {getattr(torch, '__long_version__',torch.__version__)}
-•
-gradio: {gradio.__version__}
 """
     return versions_html
 

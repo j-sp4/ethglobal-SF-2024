@@ -1,25 +1,68 @@
 import os
 import tempfile
-from helpers.logger import logger
-from swap.models import SwapModel
-from starlette.concurrency import run_in_threadpool
-from fastapi import HTTPException
-from helpers.walrus import get_file_from_walrus, upload_file_to_walrus
-from roop.core import batch_process_regular
-import os
 import shutil
 import pathlib
-import roop.utilities as util
+from ..helpers.logger import logger
+from .models import SwapModel, SwapArgs
+from starlette.concurrency import run_in_threadpool
+from fastapi import HTTPException
+from ..helpers.walrus import get_file_from_walrus, upload_file_to_walrus
+from roop.core import batch_process_regular
 import roop.globals
-from roop.face_util import extract_face_images, create_blank_image
-from roop.capturer import get_video_frame, get_video_frame_total, get_image_frame
-from roop.ProcessEntry import ProcessEntry
+from .utils import map_mask_engine, process_entry
+from .target_faces import calculate_and_get_target_faces
+from .input_faces import process_src_images
+from roop.ProcessMgr import ProcessMgr
 from roop.ProcessOptions import ProcessOptions
-from roop.FaceSet import FaceSet
-from swap.utils import index_of_no_face_action, map_mask_engine, process_entry
-from swap.target_faces import calculate_and_get_target_faces
-from swap.input_faces import process_src_images
-from swap.models import SwapModel, SwapArgs
+from roop.utilities import conditional_download, resolve_relative_path
+
+# Add this function definition
+def get_processing_plugins(masking_engine):
+    processors = {"faceswap": {}}
+    if masking_engine is not None:
+        if masking_engine == "Clip2Seg":
+            logger.warning("Clip2Seg model is not available. Falling back to XSeg masking.")
+            processors.update({"mask_xseg": {}})
+        elif masking_engine == "XSeg":
+            processors.update({"mask_xseg": {}})
+        else:
+            processors.update({masking_engine: {}})
+    
+    if roop.globals.selected_enhancer == 'GFPGAN':
+        processors.update({"gfpgan": {}})
+    elif roop.globals.selected_enhancer == 'Codeformer':
+        processors.update({"codeformer": {}})
+    elif roop.globals.selected_enhancer == 'DMDNet':
+        processors.update({"dmdnet": {}})
+    elif roop.globals.selected_enhancer == 'GPEN':
+        processors.update({"gpen": {}})
+    elif roop.globals.selected_enhancer == 'Restoreformer++':
+        processors.update({"restoreformer++": {}})
+    return processors
+
+# Add this function to check and download required models
+def ensure_models_exist():
+    models_dir = resolve_relative_path('../models')
+    logger.info(f"Models directory: {models_dir}")
+    
+    files_to_download = [
+        'https://huggingface.co/countfloyd/deepfake/resolve/main/inswapper_128.onnx',
+        'https://huggingface.co/countfloyd/deepfake/resolve/main/GFPGANv1.4.onnx',
+        'https://huggingface.co/countfloyd/deepfake/resolve/main/xseg.onnx'
+    ]
+    
+    for file_url in files_to_download:
+        success = conditional_download(models_dir, [file_url])
+        logger.info(f"Download of {file_url.split('/')[-1]} {'successful' if success else 'failed'}")
+    
+    # Check if files exist after download
+    for file_url in files_to_download:
+        file_name = file_url.split('/')[-1]
+        file_path = os.path.join(models_dir, file_name)
+        if os.path.exists(file_path):
+            logger.info(f"File {file_name} exists at {file_path}")
+        else:
+            logger.error(f"File {file_name} does not exist at {file_path}")
 
 DIRECTORY = tempfile.gettempdir()
 UPLOAD_DIRECTORY = os.path.join(DIRECTORY, "uploads")
@@ -46,6 +89,9 @@ async def get_swap_implementation(data: SwapModel):
     logger.debug(src_video_save_path)
     logger.debug(target_image_save_path)
     try:
+        # Ensure models exist before processing
+        ensure_models_exist()
+
         # await run_in_threadpool(
         #     get_file_from_gcs, src_video_blob_name, src_video_save_path, swap_video_bucket_name
         # )
@@ -60,7 +106,25 @@ async def get_swap_implementation(data: SwapModel):
         )
         logger.debug("file was retrieved from GCS and saved locally")
 
-        swap_stats = await swap_faces(src_video_save_path, target_image_save_path, swap_args)
+        faces_middle, faces_quarter, faces_three_quarter = await calculate_and_get_target_faces(src_video_save_path)
+        await process_src_images(target_image_save_path)
+        
+        # Initialize ProcessMgr here
+        process_mgr = ProcessMgr()
+        options = ProcessOptions(
+            processordefines=get_processing_plugins(data.swap_args.selected_mask_engine),
+            face_distance=data.swap_args.face_distance,
+            blend_ratio=data.swap_args.blend_ratio,
+            swap_mode=data.swap_args.swap_mode,
+            selected_index=0,
+            masking_text=data.swap_args.clip_text,
+            imagemask=None,
+            num_steps=data.swap_args.num_swap_steps,
+            show_face_area=False
+        )
+        process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
+
+        swap_stats = await swap_faces(src_video_save_path, target_image_save_path, data.swap_args, process_mgr)
         logger.debug(swap_stats)
         logger.debug("swap complete")
         if swap_stats:
@@ -82,14 +146,15 @@ async def get_swap_implementation(data: SwapModel):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def swap_faces(src_video_path: str, target_image_path: str, swap_args: SwapArgs):
+async def swap_faces(src_video_path: str, target_image_path: str, swap_args: SwapArgs, process_mgr: ProcessMgr):
     global is_processing
-    calculate_and_get_target_faces(src_video_path)
-    process_src_images(target_image_path)
-    list_files_process = [process_entry(src_video_path)]
 
-    if roop.globals.CFG.clear_output:
-        shutil.rmtree(roop.globals.output_path)
+    faces_middle, faces_quarter, faces_three_quarter = await calculate_and_get_target_faces(src_video_path)
+    await process_src_images(target_image_path)
+    list_files_process = [await process_entry(src_video_path)]
+
+    # if roop.globals.CFG.clear_output:
+    #     shutil.rmtree(roop.globals.output_path)
 
     # prepare_environment()
 
@@ -101,7 +166,7 @@ def swap_faces(src_video_path: str, target_image_path: str, swap_args: SwapArgs)
     roop.globals.wait_after_extraction = swap_args.wait_after_extraction
     roop.globals.skip_audio = swap_args.skip_audio
     roop.globals.face_swap_mode = swap_args.swap_mode
-    roop.globals.no_face_action = index_of_no_face_action(swap_args.no_face_action)
+    roop.globals.no_face_action = swap_args.no_face_action
     roop.globals.vr_mode = swap_args.vr_mode
     roop.globals.autorotate_faces = swap_args.autorotate
     mask_engine = map_mask_engine(swap_args.selected_mask_engine, swap_args.clip_text)
@@ -123,4 +188,7 @@ def swap_faces(src_video_path: str, target_image_path: str, swap_args: SwapArgs)
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [str(item) for item in outdir.rglob("*") if item.is_file()]
     return outfiles
+
+
+
 

@@ -42,10 +42,3 @@ class SwapModel(BaseModel):
     target_image_blob_id: str
     swap_args: SwapArgs
 
-
-class ProcessEntry(BaseModel):
-    filename = str
-    finalname = None
-    startframe = int
-    endframe = int
-    fps = int

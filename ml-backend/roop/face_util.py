@@ -10,6 +10,8 @@ import numpy as np
 from skimage import transform as trans
 from roop.capturer import get_video_frame
 from roop.utilities import resolve_relative_path, conditional_download
+from src.helpers.logger import logger
+from src.helpers.walrus import upload_file_to_walrus
 
 FACE_ANALYSER = None
 THREAD_LOCK_ANALYSER = threading.Lock()
@@ -17,42 +19,51 @@ THREAD_LOCK_SWAPPER = threading.Lock()
 FACE_SWAPPER = None
 
 
+
 def get_face_analyser() -> Any:
-    global FACE_ANALYSER
+    global FACE_ANALYSER, process_mgr
 
     with THREAD_LOCK_ANALYSER:
         if FACE_ANALYSER is None or roop.globals.g_current_face_analysis != roop.globals.g_desired_face_analysis:
             model_path = resolve_relative_path('..')
-            # removed genderage
             allowed_modules = roop.globals.g_desired_face_analysis
             roop.globals.g_current_face_analysis = roop.globals.g_desired_face_analysis
+            logger.debug(f"Model path resolved to: {model_path}")
+            logger.debug(f"Allowed modules for face analysis: {allowed_modules}")
             if roop.globals.CFG.force_cpu:
-                print("Forcing CPU for Face Analysis")
+                logger.debug("Forcing CPU for Face Analysis")
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
                     name="buffalo_l",
-                    root=model_path, providers=["CPUExecutionProvider"],allowed_modules=allowed_modules
+                    root=model_path, providers=["CPUExecutionProvider"], allowed_modules=allowed_modules
                 )
             else:
+                logger.debug("Using default execution providers for Face Analysis")
                 FACE_ANALYSER = insightface.app.FaceAnalysis(
-                    name="buffalo_l", root=model_path, providers=roop.globals.execution_providers,allowed_modules=allowed_modules
+                    name="buffalo_l", root=model_path, providers=roop.globals.execution_providers, allowed_modules=allowed_modules
                 )
             FACE_ANALYSER.prepare(
                 ctx_id=0,
                 det_size=(640, 640) if roop.globals.default_det_size else (320, 320),
             )
+            logger.debug("Face analyser prepared with context ID 0")
     return FACE_ANALYSER
 
 
 def get_first_face(frame: Frame) -> Any:
     try:
+        logger.debug(f"Analyzing frame of shape: {frame.shape}")
         faces = get_face_analyser().get(frame)
+        if not faces:
+            logger.warning("No faces detected in the frame.")
+            return None
+        logger.debug(f"Detected {len(faces)} faces in the frame.")
         return min(faces, key=lambda x: x.bbox[0])
-    #   return sorted(faces, reverse=True, key=lambda x: (x.bbox[2] - x.bbox[0]) * (x.bbox[3] - x.bbox[1]))[0]
-    except:
+    except Exception as e:
+        logger.error(f"Error during face detection: {e}")
         return None
 
 
-def get_all_faces(frame: Frame) -> Any:
+async def get_all_faces(frame: Frame) -> Any:
     try:
         faces = get_face_analyser().get(frame)
         return sorted(faces, key=lambda x: x.bbox[0])
@@ -60,31 +71,42 @@ def get_all_faces(frame: Frame) -> Any:
         return None
 
 
-def extract_face_images(source_filename, video_info, extra_padding=-1.0):
+async def extract_face_images(source_filename, video_info, extra_padding=-1.0):
     face_data = []
     source_image = None
+
+    logger.debug(f"Starting face extraction from {source_filename} with video_info: {video_info} and extra_padding: {extra_padding}")
 
     if video_info[0]:
         frame = get_video_frame(source_filename, video_info[1])
         if frame is not None:
             source_image = frame
+            logger.debug("Video frame successfully retrieved.")
+            # blob_id = await upload_file_to_walrus(source_filename)
+            # logger.debug(f"Uploaded file to Walrus with blob_id: {blob_id}")
         else:
+            logger.warning("Failed to retrieve video frame.")
             return face_data
     else:
         source_image = cv2.imdecode(np.fromfile(source_filename, dtype=np.uint8), cv2.IMREAD_COLOR)
-
-    faces = get_all_faces(source_image)
+        logger.debug("Image successfully decoded from file.")
+        
+    faces = await get_all_faces(source_image)
     if faces is None:
+        logger.warning("No faces detected in the source image.")
         return face_data
 
     i = 0
     for face in faces:
         (startX, startY, endX, endY) = face["bbox"].astype("int")
         startX, endX, startY, endY = clamp_cut_values(startX, endX, startY, endY, source_image)
+        logger.debug(f"Processing face {i}: bbox=({startX}, {startY}, {endX}, {endY})")
+
         if extra_padding > 0.0:
             if source_image.shape[:2] == (512, 512):
                 i += 1
                 face_data.append([face, source_image])
+                logger.debug(f"Face {i} added with no extra padding.")
                 continue
 
             found = False
@@ -92,7 +114,6 @@ def extract_face_images(source_filename, video_info, extra_padding=-1.0):
                 (startX, startY, endX, endY) = face["bbox"].astype("int")
                 startX, endX, startY, endY = clamp_cut_values(startX, endX, startY, endY, source_image)
                 cutout_padding = extra_padding
-                # top needs extra room for detection
                 padding = int((endY - startY) * cutout_padding)
                 oldY = startY
                 startY -= padding
@@ -114,18 +135,23 @@ def extract_face_images(source_filename, video_info, extra_padding=-1.0):
                     i += 1
                     face_data.append([testfaces[0], face_temp])
                     found = True
+                    logger.debug(f"Face {i} found and added after resizing.")
                     break
 
             if not found:
-                print("No face found after resizing, this shouldn't happen!")
+                logger.error("No face found after resizing, this shouldn't happen!")
             continue
 
         face_temp = source_image[startY:endY, startX:endX]
         if face_temp.size < 1:
+            logger.warning(f"Face {i} has zero size after extraction, skipping.")
             continue
 
         i += 1
         face_data.append([face, face_temp])
+        logger.debug(f"Face {i} added successfully.")
+
+    logger.debug("Face extraction completed.")
     return face_data
 
 
@@ -303,4 +329,6 @@ def create_blank_image(width, height):
     img = np.zeros((height, width, 4), dtype=np.uint8)
     img[:] = [0,0,0,0]
     return img
+
+
 

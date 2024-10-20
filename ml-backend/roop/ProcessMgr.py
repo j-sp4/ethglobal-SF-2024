@@ -6,7 +6,7 @@ import psutil
 from enum import Enum
 from roop.ProcessOptions import ProcessOptions
 
-from roop.face_util import get_first_face, get_all_faces, rotate_image_180, rotate_anticlockwise, rotate_clockwise, clamp_cut_values
+from roop.face_util import get_first_face, get_all_faces, rotate_image_180, rotate_anticlockwise, rotate_clockwise, clamp_cut_values, extract_face_images as face_util_extract_face_images
 from roop.utilities import compute_cosine_distance, get_device, str_to_class
 import roop.vr_util as vr
 
@@ -65,7 +65,6 @@ class ProcessMgr():
 
     videowriter= None
 
-    progress_gradio = None
     total_frames = 0
 
     
@@ -85,10 +84,6 @@ class ProcessMgr():
     'removebg'          : 'Frame_Masking',
     'upscale'           : 'Frame_Upscale'
     }
-
-    def __init__(self, progress):
-        if progress is not None:
-            self.progress_gradio = progress
 
     def reuseOldProcessor(self, name:str):
         for p in self.processors:
@@ -313,9 +308,6 @@ class ProcessMgr():
             'execution_threads': self.num_threads
         })
         progress.update(1)
-        if self.progress_gradio is not None:
-            self.progress_gradio((progress.n, self.total_frames), desc='Processing', total=self.total_frames, unit='frames')
-
 
 # https://github.com/deepinsight/insightface#third-party-re-implementation-of-arcface
 # https://github.com/deepinsight/insightface/blob/master/alignment/coordinate_reg/image_infer.py
@@ -699,4 +691,11 @@ class ProcessMgr():
         for p in self.processors:
             p.Release()
         self.processors.clear()
+
+    async def extract_face_images(self, source_filename, video_info):
+        return await face_util_extract_face_images(source_filename, video_info)
+
+
+
+
 

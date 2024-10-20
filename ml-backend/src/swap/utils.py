@@ -1,12 +1,9 @@
-import util
-import roop
-import os
-
-from models import ProcessEntry
+import roop.globals
 from roop.capturer import get_video_frame_total
 from roop.face_util import extract_face_images
 from roop.capturer import get_image_frame
 from roop.FaceSet import FaceSet
+from roop.ProcessEntry import ProcessEntry
 
 
 def map_mask_engine(selected_mask_engine, clip_text):
@@ -20,21 +17,14 @@ def map_mask_engine(selected_mask_engine, clip_text):
         mask_engine = None
     return mask_engine
 
-
-def index_of_no_face_action(dropdown_text):
-    global no_face_choices
-
-    return no_face_choices.index(dropdown_text) 
-
-def process_entry(video_path: str):
-    return ProcessEntry(filename=video_path, startframe=0, endframe=get_video_frame_total(video_path), fps=50)
+async def process_entry(video_path: str):
+    return ProcessEntry(filename=video_path, start=0, end= get_video_frame_total(video_path), fps=50)
 
 ##This refers to the source video
 def on_selected_face():
     global IS_INPUT, SELECTED_FACE_INDEX, SELECTION_FACES_DATA
     
     fd = SELECTION_FACES_DATA[SELECTED_FACE_INDEX]
-    image = util.convert_to_gradio(fd[1])
     if IS_INPUT:
         handle_input_face(fd)
     else:

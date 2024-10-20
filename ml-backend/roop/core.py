@@ -21,7 +21,6 @@ import roop.globals
 import roop.metadata
 import roop.utilities as util
 import roop.util_ffmpeg as ffmpeg
-import ui.main as main
 from settings import Settings
 from roop.face_util import extract_face_images
 from roop.ProcessEntry import ProcessEntry
@@ -204,13 +203,13 @@ def live_swap(frame, options):
     return newframe
 
 
-def batch_process_regular(files:list[ProcessEntry], masking_engine:str, new_clip_text:str, use_new_method, imagemask, num_swap_steps, progress, selected_index = 0) -> None:
+def batch_process_regular(files:list[ProcessEntry], masking_engine:str, new_clip_text:str, use_new_method, imagemask, num_swap_steps, selected_index = 0) -> None:
     global clip_text, process_mgr
 
     release_resources()
     limit_resources()
     if process_mgr is None:
-        process_mgr = ProcessMgr(progress)
+        process_mgr = ProcessMgr()
     mask = imagemask["layers"][0] if imagemask is not None else None
     if len(roop.globals.INPUT_FACESETS) <= selected_index:
         selected_index = 0
@@ -219,13 +218,13 @@ def batch_process_regular(files:list[ProcessEntry], masking_engine:str, new_clip
     batch_process(files, use_new_method)
     return
 
-def batch_process_with_options(files:list[ProcessEntry], options, progress):
+def batch_process_with_options(files:list[ProcessEntry], options):
     global clip_text, process_mgr
 
     release_resources()
     limit_resources()
     if process_mgr is None:
-        process_mgr = ProcessMgr(progress)
+        process_mgr = ProcessMgr()
     process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
     roop.globals.keep_frames = False
     roop.globals.wait_after_extraction = False
@@ -375,4 +374,3 @@ def run() -> None:
     roop.globals.video_encoder = roop.globals.CFG.output_video_codec
     roop.globals.video_quality = roop.globals.CFG.video_quality
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
-    main.run()
