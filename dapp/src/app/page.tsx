@@ -2,14 +2,21 @@
 
 import { BackgroundLines } from "@/components/ui/background-lines";
 import { Button } from "@/components/ui/button";
+import { DynamicWidget } from "@dynamic-labs/sdk-react-core";
 import { useRouter } from "next/navigation";
+import { useIsLoggedIn } from "@dynamic-labs/sdk-react-core";
+import { useEffect } from "react";
 
 function App() {
   const router = useRouter();
+  const isLoggedIn = useIsLoggedIn();
 
-  const handleGetStarted = () => {
-    router.push("/market");
-  };
+  useEffect(() => {
+    console.log("isLoggedIn", isLoggedIn);
+    if (isLoggedIn) {
+      router.push("/market");
+    }
+  }, [isLoggedIn]);
 
   return (
     <BackgroundLines className="flex items-center justify-center w-full flex-col px-4">
@@ -21,7 +28,8 @@ function App() {
         An ethical deepfake AI marketplace powered by Flow.
       </p>
       <br />
-      <Button onClick={handleGetStarted}>Get Started</Button>
+      <DynamicWidget />
+      {/* <Button onClick={handleGetStarted}>Get Started</Button> */}
     </BackgroundLines>
   );
 }
