@@ -16,8 +16,9 @@ from roop.capturer import get_video_frame, get_video_frame_total, get_image_fram
 from roop.ProcessEntry import ProcessEntry
 from roop.ProcessOptions import ProcessOptions
 from roop.FaceSet import FaceSet
-from swap.utils import translate_swap_mode, index_of_no_face_action, map_mask_engine
-
+from swap.utils import index_of_no_face_action, map_mask_engine, process_entry
+from swap.target_faces import calculate_and_get_target_faces
+from swap.input_faces import process_src_images
 from swap.models import SwapModel, SwapArgs
 
 DIRECTORY = tempfile.gettempdir()
@@ -27,7 +28,8 @@ src_video_bucket_name = os.getenv("GOOGLE_SRC_VIDEO_BUCKET_NAME")
 target_image_bucket_name = os.getenv("GOOGLE_TARGET_IMAGE_BUCKET_NAME")
 swap_video_bucket_name = os.getenv("GOOGLE_SWAP_VIDEO_BUCKET_NAME")
 
-list_files_process : list[ProcessEntry] = []
+input_faces = None
+target_faces = None
 
 async def get_swap_implementation(data: SwapModel):
     logger.debug(data)
@@ -80,12 +82,12 @@ async def get_swap_implementation(data: SwapModel):
         raise HTTPException(status_code=500, detail=str(e))
 
 
-def swap_faces(swap_args: SwapArgs):
-    global is_processing, list_files_process
+def swap_faces(src_video_path: str, target_image_path: str, swap_args: SwapArgs):
+    global is_processing
+    calculate_and_get_target_faces(src_video_path)
+    process_src_images(target_image_path)
+    list_files_process = [process_entry(src_video_path)]
 
-    # if list_files_process is None or len(list_files_process) <= 0:
-    #     return gr.Button(variant="primary"), None, None
-    
     if roop.globals.CFG.clear_output:
         shutil.rmtree(roop.globals.output_path)
 
@@ -120,7 +122,5 @@ def swap_faces(swap_args: SwapArgs):
     is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [str(item) for item in outdir.rglob("*") if item.is_file()]
-    if len(outfiles) > 0:
-        yield gr.Button(variant="primary", interactive=True),gr.Button(variant="secondary", interactive=False),gr.Files(value=outfiles)
-    else:
-        yield gr.Button(variant="primary", interactive=True),gr.Button(variant="secondary", interactive=False),None
+    return outfiles
+

@@ -18,7 +18,7 @@ class SwapArgs(BaseModel):
     blend_ratio: float
     #mask engine
     selected_mask_engine: Literal["Clip2Seg", "DFL XSeg"]
-    #"List of objects to mask and restore back on fake face"
+    #"List of objects to mask and restore back on fake face, e.g sunglasses, hands, etc"
     clip_text: str
     #Default is In-Memory processing 
     processing_method: Literal["In-Memory processing", "File processing"]
@@ -43,10 +43,9 @@ class SwapModel(BaseModel):
     swap_args: SwapArgs
 
 
-class ProcessEntry:
-    def __init__(self, filename: str, start: int, end: int, fps: float):
-        self.filename = filename
-        self.finalname = None
-        self.startframe = start
-        self.endframe = end
-        self.fps = fps
+class ProcessEntry(BaseModel):
+    filename = str
+    finalname = None
+    startframe = int
+    endframe = int
+    fps = int
