@@ -91,7 +91,7 @@ async def extract_face_images(source_filename, video_info, extra_padding=-1.0):
         source_image = cv2.imdecode(np.fromfile(source_filename, dtype=np.uint8), cv2.IMREAD_COLOR)
         logger.debug("Image successfully decoded from file.")
         
-    faces = await get_all_faces(source_image)
+    faces = get_all_faces(source_image)
     if faces is None:
         logger.warning("No faces detected in the source image.")
         return face_data

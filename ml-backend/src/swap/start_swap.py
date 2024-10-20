@@ -16,6 +16,26 @@ from roop.ProcessMgr import ProcessMgr
 from roop.ProcessOptions import ProcessOptions
 from roop.utilities import conditional_download, resolve_relative_path
 
+DIRECTORY = tempfile.gettempdir()
+UPLOAD_DIRECTORY = os.path.join(DIRECTORY, "uploads")
+SWAP_DIRECTORY = os.path.join(DIRECTORY, "swap")
+
+# Ensure the UPLOAD_DIRECTORY exists
+if not os.path.exists(UPLOAD_DIRECTORY):
+    os.makedirs(UPLOAD_DIRECTORY)
+
+# Ensure the SWAP_DIRECTORY exists
+if not os.path.exists(SWAP_DIRECTORY):
+    os.makedirs(SWAP_DIRECTORY)
+
+src_video_bucket_name = os.getenv("GOOGLE_SRC_VIDEO_BUCKET_NAME")
+target_image_bucket_name = os.getenv("GOOGLE_TARGET_IMAGE_BUCKET_NAME")
+swap_video_bucket_name = os.getenv("GOOGLE_SWAP_VIDEO_BUCKET_NAME")
+
+input_faces = None
+target_faces = None
+
+
 # Add this function definition
 def get_processing_plugins(masking_engine):
     processors = {"faceswap": {}}
@@ -64,16 +84,6 @@ def ensure_models_exist():
         else:
             logger.error(f"File {file_name} does not exist at {file_path}")
 
-DIRECTORY = tempfile.gettempdir()
-UPLOAD_DIRECTORY = os.path.join(DIRECTORY, "uploads")
-
-src_video_bucket_name = os.getenv("GOOGLE_SRC_VIDEO_BUCKET_NAME")
-target_image_bucket_name = os.getenv("GOOGLE_TARGET_IMAGE_BUCKET_NAME")
-swap_video_bucket_name = os.getenv("GOOGLE_SWAP_VIDEO_BUCKET_NAME")
-
-input_faces = None
-target_faces = None
-
 async def get_swap_implementation(data: SwapModel):
     logger.debug(data)
     print("Data coming to get_swap_implementation", data)
@@ -82,8 +92,7 @@ async def get_swap_implementation(data: SwapModel):
     target_image_blob_name = data.target_image_blob_name
     target_image_blob_id = data.target_image_blob_id
     swap_args = data.swap_args
-    if not os.path.exists(UPLOAD_DIRECTORY):
-        os.makedirs(UPLOAD_DIRECTORY)
+
     src_video_save_path = os.path.join(UPLOAD_DIRECTORY, src_video_blob_name)
     target_image_save_path = os.path.join(UPLOAD_DIRECTORY, target_image_blob_name)
     logger.debug(src_video_save_path)
@@ -107,7 +116,7 @@ async def get_swap_implementation(data: SwapModel):
         logger.debug("file was retrieved from GCS and saved locally")
 
         faces_middle, faces_quarter, faces_three_quarter = await calculate_and_get_target_faces(src_video_save_path)
-        await process_src_images(target_image_save_path)
+        await process_src_images([target_image_save_path])
         
         # Initialize ProcessMgr here
         process_mgr = ProcessMgr()
@@ -124,17 +133,16 @@ async def get_swap_implementation(data: SwapModel):
         )
         process_mgr.initialize(roop.globals.INPUT_FACESETS, roop.globals.TARGET_FACES, options)
 
-        swap_stats = await swap_faces(src_video_save_path, target_image_save_path, data.swap_args, process_mgr)
-        logger.debug(swap_stats)
+        outfiles = await swap_faces(src_video_save_path, target_image_save_path, data.swap_args, process_mgr)
+        logger.debug(outfiles)
         logger.debug("swap complete")
-        if swap_stats:
+        if outfiles[0]:
             swap_video_blob_id = await run_in_threadpool(
                 upload_file_to_walrus,
-                src_video_save_path,
+                outfiles[0],
             )
             return {
                 "swap_video_blob_id": swap_video_blob_id,
-                "stats": swap_stats,
             }
         else:
             logger.error("Failed to analyze the file")
@@ -150,14 +158,14 @@ async def swap_faces(src_video_path: str, target_image_path: str, swap_args: Swa
     global is_processing
 
     faces_middle, faces_quarter, faces_three_quarter = await calculate_and_get_target_faces(src_video_path)
-    await process_src_images(target_image_path)
+    await process_src_images([target_image_path])
     list_files_process = [await process_entry(src_video_path)]
 
     # if roop.globals.CFG.clear_output:
     #     shutil.rmtree(roop.globals.output_path)
 
     # prepare_environment()
-
+    roop.globals.output_path = SWAP_DIRECTORY
     roop.globals.selected_enhancer = swap_args.enhancer
     roop.globals.target_path = None
     roop.globals.distance_threshold = swap_args.face_distance
@@ -182,8 +190,8 @@ async def swap_faces(src_video_path: str, target_image_path: str, swap_args: Swa
     roop.globals.max_memory = roop.globals.CFG.memory_limit if roop.globals.CFG.memory_limit > 0 else None
 
     processing_method = swap_args.processing_method
-
-    batch_process_regular(list_files_process, mask_engine, swap_args.clip_text, processing_method == "In-Memory processing", swap_args.imagemask, swap_args.num_swap_steps, progress, SELECTED_INPUT_FACE_INDEX)
+    logger.debug(roop.globals.INPUT_FACESETS)
+    batch_process_regular(list_files_process, mask_engine, swap_args.clip_text, processing_method == "In-Memory processing", None, swap_args.num_swap_steps )
     is_processing = False
     outdir = pathlib.Path(roop.globals.output_path)
     outfiles = [str(item) for item in outdir.rglob("*") if item.is_file()]

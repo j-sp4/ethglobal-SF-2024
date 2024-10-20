@@ -1,3 +1,5 @@
+import uvicorn
+import os
 from fastapi import FastAPI
 from src.swap.api import start_swap, get_swap_status, get_swap
 from src.swap.models import SwapModel
@@ -27,3 +29,5 @@ async def get_swap_status_api(job_id: str):
 async def get_swap_api(swap_request: SwapModel):
     return await get_swap(swap_request)
 
+if __name__ == '__main__':
+    uvicorn.run(app, host="0.0.0.0", port=os.getenv("BACKEND_PORT"), reload=True)

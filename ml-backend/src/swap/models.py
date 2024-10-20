@@ -30,8 +30,6 @@ class SwapArgs(BaseModel):
     autorotate: bool
     #Value from 1-5 default is 1 number of swapping steps
     num_swap_steps: int
-    #confusing needs an editor
-    imagemask: bool
    
 
 
